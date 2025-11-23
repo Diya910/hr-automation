@@ -10,3 +10,4 @@ pypdf
 python-docx
 streamlit
 streamlit-authenticator
+langchain-openai
