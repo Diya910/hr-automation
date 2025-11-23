@@ -1,0 +1,12 @@
+langchain
+langchain-community
+langgraph
+langsmith
+python_dotenv
+openai
+jinja2
+langchain-google-genai
+pypdf
+python-docx
+streamlit
+streamlit-authenticator
