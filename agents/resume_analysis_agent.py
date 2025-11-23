@@ -9,7 +9,7 @@ from typing import Dict, Optional
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
 from config import DEEPSEEK_API_KEY, GEMINI_API_KEY
-from utils.logger import get_logger
+from utils.logger import get_logger, sanitize_error_message
 
 logger = get_logger(__name__)
 
@@ -36,15 +36,18 @@ def get_llm_model():
     # Try Gemini first
     if GEMINI_AVAILABLE and GEMINI_API_KEY:
         try:
+            # Use environment variable instead of passing key directly
+            # This prevents API key exposure in error messages
             model = ChatGoogleGenerativeAI(
                 model="models/gemini-2.5-flash",
-                temperature=0.3,
-                google_api_key=GEMINI_API_KEY
+                temperature=0.3
             )
             logger.info("Using Gemini model")
             return model
         except Exception as e:
-            logger.warning(f"Failed to initialize Gemini: {e}")
+            # Sanitize error message to prevent API key exposure
+            error_msg = sanitize_error_message(str(e))
+            logger.warning(f"Failed to initialize Gemini: {error_msg}")
     
     # Try DeepSeek as fallback if Gemini is not available
     if DEEPSEEK_API_KEY:
@@ -214,8 +217,10 @@ def analyze_resume(resume_text: str, job_description_text: str) -> Dict:
         return analysis_result
         
     except Exception as e:
-        logger.error(f"Error during resume analysis: {e}")
-        raise ValueError(f"Failed to analyze resume: {str(e)}")
+        # Sanitize error message to prevent API key exposure
+        error_msg = sanitize_error_message(str(e))
+        logger.error(f"Error during resume analysis: {error_msg}")
+        raise ValueError(f"Failed to analyze resume: {error_msg}")
 
 
 def extract_analysis_manually(response_text: str) -> Dict:

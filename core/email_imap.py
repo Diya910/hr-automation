@@ -49,13 +49,17 @@ def fetch_imap_emails(username, password, imap_server="imap.gmail.com", max_emai
         logger.debug(f"Found {total_emails} total emails in inbox")
         
         # Limit the number of emails to fetch (get most recent ones)
+        # IMAP email IDs are typically in ascending order (1, 2, 3...), where higher numbers = newer emails
         if total_emails > max_emails:
-            email_ids = email_ids[-max_emails:]  # Get last N emails
+            # Get last N email IDs (which are the newest emails)
+            email_ids = email_ids[-max_emails:]
             logger.debug(f"Limiting to last {max_emails} emails")
         
         emails = []
         
-        # Fetch emails in reverse order (newest first)
+        # Process emails in reverse order so newest comes first
+        # email_ids are [oldest...newest], so reversed() gives [newest...oldest]
+        # This ensures emails[0] is the newest email
         for i, num in enumerate(reversed(email_ids), 1):
             try:
                 logger.debug(f"Fetching email {i}/{len(email_ids)} (ID: {num.decode()})")

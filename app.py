@@ -17,7 +17,8 @@ from agents.email_writing_agent import generate_email_with_ai
 from core.email_sender import send_email
 from config import (
     EMAIL_USERNAME, EMAIL_PASSWORD, EMAIL_SERVER, EMAIL_PORT,
-    IMAP_USERNAME, IMAP_PASSWORD, IMAP_SERVER, IMAP_PORT
+    IMAP_USERNAME, IMAP_PASSWORD, IMAP_SERVER, IMAP_PORT,
+    ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL
 )
 from utils.file_extractor import extract_text_from_file
 from utils.email_helper import send_email_with_credentials
@@ -96,6 +97,10 @@ if 'email_credentials' not in st.session_state:
     }
 if 'hr_name' not in st.session_state:
     st.session_state.hr_name = "HR Team"
+if 'is_admin' not in st.session_state:
+    st.session_state.is_admin = False
+if 'require_email_credentials' not in st.session_state:
+    st.session_state.require_email_credentials = False
 
 
 def login_page():
@@ -108,19 +113,39 @@ def login_page():
         username = st.text_input("Username", key="login_username")
         password = st.text_input("Password", type="password", key="login_password")
         
-        # Simple authentication (you can enhance this)
+        # Authentication logic - check against .env credentials
         if st.button("Login", type="primary"):
-            # For demo purposes, accept any credentials
-            # In production, implement proper authentication
             if username and password:
-                st.session_state.authenticated = True
-                st.session_state.hr_name = username
-                st.rerun()
+                # Check against admin credentials from .env
+                if ADMIN_USERNAME and ADMIN_PASSWORD and username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+                    # Admin login - use admin email credentials from .env
+                    st.session_state.authenticated = True
+                    st.session_state.hr_name = username
+                    st.session_state.is_admin = True
+                    st.session_state.email_credentials['username'] = ADMIN_EMAIL or EMAIL_USERNAME
+                    st.session_state.email_credentials['password'] = EMAIL_PASSWORD
+                    st.session_state.email_credentials['imap_username'] = ADMIN_EMAIL or EMAIL_USERNAME
+                    st.session_state.email_credentials['imap_password'] = EMAIL_PASSWORD
+                    st.success("✅ Admin access granted. Using admin email credentials.")
+                    st.rerun()
+                else:
+                    # Non-admin login - require them to provide email credentials
+                    st.session_state.authenticated = True
+                    st.session_state.hr_name = username
+                    st.session_state.is_admin = False
+                    st.session_state.require_email_credentials = True
+                    # Clear email credentials - user must provide their own
+                    st.session_state.email_credentials['username'] = ''
+                    st.session_state.email_credentials['password'] = ''
+                    st.session_state.email_credentials['imap_username'] = ''
+                    st.session_state.email_credentials['imap_password'] = ''
+                    st.warning("⚠️ Your password doesn't match admin password. Change email and password in the sidebar to access email features (fetch, summarize, send email).")
+                    st.rerun()
             else:
                 st.error("Please enter username and password")
         
         st.markdown("---")
-        st.info("💡 Demo Mode: Enter any username and password to proceed")
+        st.info("💡 Enter user credentials or dummy credentials to access the app")
 
 
 def save_uploaded_file(uploaded_file, file_type: str) -> Optional[str]:
@@ -144,7 +169,13 @@ def main_dashboard():
         
         # Email Configuration Section
         st.markdown("### 📧 Email Settings")
-        use_custom = st.checkbox("Use Custom Email Credentials", value=False)
+        
+        # For non-admin users, always show email configuration
+        if not st.session_state.get('is_admin', False):
+            use_custom = True
+            st.info("🔒 Configure your email credentials to access email features")
+        else:
+            use_custom = st.checkbox("Use Custom Email Credentials", value=False)
         
         if use_custom:
             st.session_state.email_credentials['username'] = st.text_input(
@@ -317,7 +348,8 @@ def main_dashboard():
     
     # Tab 1: Analysis Results
     with tab1:
-        if st.session_state.resume_analysis:
+        resume_analysis = st.session_state.get('resume_analysis')
+        if resume_analysis:
             st.markdown("### 📈 Candidate Analysis Report")
             
             # Key metrics
@@ -325,22 +357,25 @@ def main_dashboard():
             with col1:
                 st.metric(
                     "Match Percentage",
-                    f"{st.session_state.resume_analysis.get('match_percentage', 0):.1f}%"
+                    f"{resume_analysis.get('match_percentage', 0):.1f}%"
                 )
             with col2:
                 st.metric(
                     "Position Level",
-                    st.session_state.resume_analysis.get('position_level', 'N/A')
+                    resume_analysis.get('position_level', 'N/A')
                 )
             with col3:
                 st.metric(
                     "Acceptance Probability",
-                    st.session_state.resume_analysis.get('acceptance_probability', 'N/A')
+                    resume_analysis.get('acceptance_probability', 'N/A')
                 )
             with col4:
+                # Safely handle email - check if it exists and is not None before slicing
+                email = resume_analysis.get('email') or 'N/A'
+                email_display = email[:20] + "..." if email and email != 'N/A' and len(email) > 20 else email
                 st.metric(
                     "Candidate Email",
-                    st.session_state.resume_analysis.get('email', 'N/A')[:20] + "..."
+                    email_display
                 )
             
             st.markdown("---")
@@ -350,7 +385,7 @@ def main_dashboard():
             
             with col1:
                 st.markdown("#### ✅ Key Strengths")
-                strengths = st.session_state.resume_analysis.get('key_strengths', [])
+                strengths = resume_analysis.get('key_strengths', [])
                 if strengths:
                     for strength in strengths:
                         st.markdown(f"- {strength}")
@@ -358,11 +393,11 @@ def main_dashboard():
                     st.info("No specific strengths identified")
                 
                 st.markdown("#### 📝 Detailed Analysis")
-                st.markdown(st.session_state.resume_analysis.get('detailed_analysis', 'No analysis available'))
+                st.markdown(resume_analysis.get('detailed_analysis', 'No analysis available'))
             
             with col2:
                 st.markdown("#### ⚠️ Key Gaps")
-                gaps = st.session_state.resume_analysis.get('key_gaps', [])
+                gaps = resume_analysis.get('key_gaps', [])
                 if gaps:
                     for gap in gaps:
                         st.markdown(f"- {gap}")
@@ -370,12 +405,12 @@ def main_dashboard():
                     st.info("No significant gaps identified")
                 
                 st.markdown("#### 💡 Recommendation")
-                st.info(st.session_state.resume_analysis.get('recommendation', 'No recommendation available'))
+                st.info(resume_analysis.get('recommendation', 'No recommendation available'))
             
-            if st.session_state.resume_analysis.get('acceptance_reasoning'):
+            if resume_analysis.get('acceptance_reasoning'):
                 st.markdown("---")
                 st.markdown("#### 🎯 Acceptance Reasoning")
-                st.markdown(st.session_state.resume_analysis.get('acceptance_reasoning'))
+                st.markdown(resume_analysis.get('acceptance_reasoning'))
         else:
             st.info("👆 Please upload and process files from the sidebar to see analysis results")
     
@@ -448,51 +483,65 @@ def main_dashboard():
         with email_tab1:
             st.markdown("#### Fetch and View Emails")
             
-            # Add option to limit number of emails
-            max_emails_to_fetch = st.number_input(
-                "Maximum emails to fetch:",
-                min_value=10,
-                max_value=100,
-                value=50,
-                step=10,
-                help="Limiting the number helps prevent connection timeouts"
-            )
+            # Check if user has configured email credentials
+            has_imap_creds = (st.session_state.email_credentials.get('imap_username') and 
+                            st.session_state.email_credentials.get('imap_password'))
+            is_admin = st.session_state.get('is_admin', False)
             
-            if st.button("🔄 Fetch Emails", type="primary"):
-                if (st.session_state.email_credentials['imap_username'] and 
-                    st.session_state.email_credentials['imap_password']):
-                    with st.spinner(f"Fetching up to {max_emails_to_fetch} emails... This may take a moment."):
-                        try:
-                            # Get IMAP port from credentials or use default
-                            imap_port = 993  # Default SSL port
-                            if 'imap_port' in st.session_state.email_credentials:
-                                try:
-                                    imap_port = int(st.session_state.email_credentials.get('imap_port', 993))
-                                except (ValueError, TypeError):
-                                    imap_port = 993
-                            
-                            emails = fetch_imap_emails(
-                                username=st.session_state.email_credentials['imap_username'],
-                                password=st.session_state.email_credentials['imap_password'],
-                                imap_server=st.session_state.email_credentials['imap_server'],
-                                max_emails=max_emails_to_fetch,
-                                port=imap_port
-                            )
-                            
-                            if emails:
-                                st.session_state.fetched_emails = emails[-10:]  # Last 10 emails for display
-                                st.success(f"✅ Successfully fetched {len(emails)} email(s)")
-                            else:
-                                st.info("📭 No emails found in inbox")
-                                st.session_state.fetched_emails = []
+            if not is_admin and not has_imap_creds:
+                st.error("❌ Please configure your email credentials in the sidebar to fetch emails.")
+                st.info("📝 Go to the sidebar → Email Settings → Configure your IMAP credentials")
+            else:
+                # Add option to limit number of emails
+                max_emails_to_fetch = st.number_input(
+                    "Maximum emails to fetch:",
+                    min_value=10,
+                    max_value=100,
+                    value=50,
+                    step=10,
+                    help="Limiting the number helps prevent connection timeouts"
+                )
+                
+                if st.button("🔄 Fetch Emails", type="primary"):
+                    # For non-admin, must have credentials configured
+                    if not is_admin and not has_imap_creds:
+                        st.error("❌ Please configure your email credentials in the sidebar first.")
+                    elif (st.session_state.email_credentials.get('imap_username') and 
+                          st.session_state.email_credentials.get('imap_password')):
+                        with st.spinner(f"Fetching up to {max_emails_to_fetch} emails... This may take a moment."):
+                            try:
+                                # Get IMAP port from credentials or use default
+                                imap_port = 993  # Default SSL port
+                                if 'imap_port' in st.session_state.email_credentials:
+                                    try:
+                                        imap_port = int(st.session_state.email_credentials.get('imap_port', 993))
+                                    except (ValueError, TypeError):
+                                        imap_port = 993
                                 
-                        except Exception as e:
-                            error_msg = str(e)
-                            st.error(f"❌ Error fetching emails: {error_msg}")
-                            
-                            # Provide helpful troubleshooting tips
-                            with st.expander("🔧 Troubleshooting Tips"):
-                                st.markdown("""
+                                emails = fetch_imap_emails(
+                                    username=st.session_state.email_credentials['imap_username'],
+                                    password=st.session_state.email_credentials['imap_password'],
+                                    imap_server=st.session_state.email_credentials['imap_server'],
+                                    max_emails=max_emails_to_fetch,
+                                    port=imap_port
+                                )
+                                
+                                if emails:
+                                    # emails are returned in reverse order (newest first)
+                                    # Take first N emails (newest first)
+                                    st.session_state.fetched_emails = emails[:max_emails_to_fetch]
+                                    st.success(f"✅ Successfully fetched {len(st.session_state.fetched_emails)} email(s) (showing newest first)")
+                                else:
+                                    st.info("📭 No emails found in inbox")
+                                    st.session_state.fetched_emails = []
+                                    
+                            except Exception as e:
+                                error_msg = str(e)
+                                st.error(f"❌ Error fetching emails: {error_msg}")
+                                
+                                # Provide helpful troubleshooting tips
+                                with st.expander("🔧 Troubleshooting Tips"):
+                                    st.markdown("""
                                 **Common issues and solutions:**
                                 1. **Connection timeout**: Try reducing the maximum emails to fetch
                                 2. **Authentication error**: Verify your IMAP app password is correct
@@ -505,8 +554,8 @@ def main_dashboard():
                                 - Generate an App Password from Google Account settings
                                 - Use the App Password (16 characters) instead of your regular password
                                 """)
-                else:
-                    st.warning("⚠️ Please configure IMAP credentials in the sidebar")
+                    else:
+                        st.warning("⚠️ Please configure IMAP credentials in the sidebar")
             
             if 'fetched_emails' in st.session_state and st.session_state.fetched_emails:
                 st.markdown(f"**Showing last {len(st.session_state.fetched_emails)} emails:**")
@@ -523,7 +572,15 @@ def main_dashboard():
         
         with email_tab2:
             st.markdown("#### Summarize an Email")
-            if 'fetched_emails' in st.session_state and st.session_state.fetched_emails:
+            
+            # Check credentials
+            is_admin = st.session_state.get('is_admin', False)
+            has_imap_creds = (st.session_state.email_credentials.get('imap_username') and 
+                            st.session_state.email_credentials.get('imap_password'))
+            
+            if not is_admin and not has_imap_creds:
+                st.error("❌ Please configure your email credentials in the sidebar to summarize emails.")
+            elif 'fetched_emails' in st.session_state and st.session_state.fetched_emails:
                 email_options = {f"{email.get('subject', 'No Subject')} - {email.get('from', 'Unknown')}": idx 
                                 for idx, email in enumerate(st.session_state.fetched_emails)}
                 selected_email_label = st.selectbox("Select an email to summarize:", list(email_options.keys()))
@@ -619,6 +676,15 @@ def main_dashboard():
                 height=200,
                 placeholder="Enter your email content here..."
             )
+            
+            # Check credentials before allowing send
+            is_admin = st.session_state.get('is_admin', False)
+            has_smtp_creds = (st.session_state.email_credentials.get('username') and 
+                            st.session_state.email_credentials.get('password'))
+            
+            if not is_admin and not has_smtp_creds:
+                st.error("❌ Please configure your email credentials in the sidebar to send emails.")
+                st.stop()
             
             # Send button
             if st.button("✉️ Send Email", type="primary", use_container_width=True):

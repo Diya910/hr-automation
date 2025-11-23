@@ -38,14 +38,9 @@ def send_email_with_credentials(
         True if sent successfully, False otherwise
     """
     try:
-        # Format the email
-        formatted_content = (
-            f"Subject: {subject}\n\n"
-            f"Dear {sender_name},\n\n"
-            f"{body}\n\n"
-            f"Best regards,\n"
-            f"{hr_name}"
-        )
+        # Format the email - use body as-is, don't add automatic signature or greeting
+        # User controls the entire email content including greeting and signature
+        formatted_content = body.strip()
         
         msg = EmailMessage()
         msg["Subject"] = subject

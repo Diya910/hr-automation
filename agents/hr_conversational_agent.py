@@ -9,7 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_community.chat_message_histories import ChatMessageHistory
 from config import DEEPSEEK_API_KEY, GEMINI_API_KEY
-from utils.logger import get_logger
+from utils.logger import get_logger, sanitize_error_message
 from core.email_sender import send_email as send_email_smtp
 from utils.formatter import format_email
 
@@ -38,15 +38,18 @@ def get_llm_model():
     # Try Gemini first
     if GEMINI_AVAILABLE and GEMINI_API_KEY:
         try:
+            # Use environment variable instead of passing key directly
+            # This prevents API key exposure in error messages
             model = ChatGoogleGenerativeAI(
                 model="models/gemini-2.5-flash",
-                temperature=0.7,
-                google_api_key=GEMINI_API_KEY
+                temperature=0.7
             )
             logger.info("Using Gemini model for HR agent")
             return model
         except Exception as e:
-            logger.warning(f"Failed to initialize Gemini: {e}")
+            # Sanitize error message to prevent API key exposure
+            error_msg = sanitize_error_message(str(e))
+            logger.warning(f"Failed to initialize Gemini: {error_msg}")
     
     # Try DeepSeek as fallback if Gemini is not available
     if DEEPSEEK_API_KEY:
@@ -356,14 +359,9 @@ class HRConversationalAgent:
             # Format the email (format_email adds "Re: " prefix, so we'll format manually for new emails)
             candidate_name = self._extract_candidate_name()
             
-            # Create formatted email content
-            formatted_content = (
-                f"Subject: {subject}\n\n"
-                f"Dear {candidate_name},\n\n"
-                f"{body}\n\n"
-                f"Best regards,\n"
-                f"{self.hr_name}"
-            )
+            # Use body exactly as provided - no automatic greetings or signatures
+            # User has full control over email content
+            formatted_content = body.strip()
             
             msg = EmailMessage()
             msg["Subject"] = subject

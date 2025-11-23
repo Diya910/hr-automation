@@ -1,7 +1,7 @@
 from langchain_core.prompts import PromptTemplate
 from config import GEMINI_API_KEY, DEEPSEEK_API_KEY  # Import API keys from config
 from utils.formatter import clean_text, format_email
-from utils.logger import get_logger
+from utils.logger import get_logger, sanitize_error_message
 
 from email.utils import parseaddr
 
@@ -44,14 +44,17 @@ def generate_response(email: dict, summary: str, recipient_name: str, your_name:
     model = None
     if GEMINI_AVAILABLE and GEMINI_API_KEY:
         try:
+            # Use environment variable instead of passing key directly
+            # This prevents API key exposure in error messages
             model = ChatGoogleGenerativeAI(
                 model="models/gemini-2.5-flash",
-                temperature=0.5,
-                google_api_key=GEMINI_API_KEY
+                temperature=0.5
             )
             logger.debug("Using Gemini model for email response generation")
         except Exception as e:
-            logger.warning(f"Failed to initialize Gemini: {e}")
+            # Sanitize error message to prevent API key exposure
+            error_msg = sanitize_error_message(str(e))
+            logger.warning(f"Failed to initialize Gemini: {error_msg}")
     
     if model is None and DEEPSEEK_API_KEY:
         try:

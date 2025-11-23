@@ -4,7 +4,7 @@ Helps HR write professional emails with or without candidate context.
 """
 from langchain_core.prompts import PromptTemplate
 from config import GEMINI_API_KEY, DEEPSEEK_API_KEY
-from utils.logger import get_logger
+from utils.logger import get_logger, sanitize_error_message
 
 logger = get_logger(__name__)
 
@@ -21,14 +21,17 @@ def get_llm_model():
     """Get available LLM model (Gemini or DeepSeek)."""
     if GEMINI_AVAILABLE and GEMINI_API_KEY:
         try:
+            # Use environment variable instead of passing key directly
+            # This prevents API key exposure in error messages
             model = ChatGoogleGenerativeAI(
                 model="models/gemini-2.5-flash",
-                temperature=0.7,
-                google_api_key=GEMINI_API_KEY
+                temperature=0.7
             )
             return model
         except Exception as e:
-            logger.warning(f"Failed to initialize Gemini: {e}")
+            # Sanitize error message to prevent API key exposure
+            error_msg = sanitize_error_message(str(e))
+            logger.warning(f"Failed to initialize Gemini: {error_msg}")
     
     if DEEPSEEK_API_KEY:
         try:
@@ -84,7 +87,11 @@ def generate_email_with_ai(
                 f"HR INSTRUCTIONS:\n{user_prompt}\n\n"
                 f"Generate a professional email. Provide ONLY a JSON response with this exact format:\n"
                 f'{{"subject": "Email Subject Here", "body": "Email body content here"}}\n\n'
-                f"Make the email professional, personalized, and relevant to the candidate and job."
+                f"IMPORTANT: Generate ONLY the email body content. Do NOT include:\n"
+                f"- Greetings like 'Dear [Name]' or 'Hi [Name]' (user will add recipient name)\n"
+                f"- Signatures like 'Best regards' or 'Sincerely' (user will add if needed)\n"
+                f"- Placeholder names like [Name], [Recipient], etc.\n"
+                f"Just provide the main email content that can be used directly."
             )
         else:
             # Generic email without candidate context
@@ -93,7 +100,11 @@ def generate_email_with_ai(
                 f"USER INSTRUCTIONS:\n{user_prompt}\n\n"
                 f"Generate a professional email. Provide ONLY a JSON response with this exact format:\n"
                 f'{{"subject": "Email Subject Here", "body": "Email body content here"}}\n\n'
-                f"Make the email professional and appropriate for the context described."
+                f"IMPORTANT: Generate ONLY the email body content. Do NOT include:\n"
+                f"- Greetings like 'Dear [Name]' or 'Hi [Name]' (user will add recipient name)\n"
+                f"- Signatures like 'Best regards' or 'Sincerely' (user will add if needed)\n"
+                f"- Placeholder names like [Name], [Recipient], etc.\n"
+                f"Just provide the main email content that can be used directly."
             )
         
         response = model.invoke(prompt)
@@ -107,9 +118,15 @@ def generate_email_with_ai(
         if json_match:
             try:
                 result = json.loads(json_match.group(0))
+                # Clean body - remove any placeholder names
+                body = result.get("body", "")
+                body = re.sub(r'\[.*?\]', '', body)  # Remove [placeholder] patterns
+                body = re.sub(r'<.*?>', '', body)  # Remove <placeholder> patterns
+                body = body.strip()
+                
                 return {
                     "subject": result.get("subject", "No Subject"),
-                    "body": result.get("body", "")
+                    "body": body
                 }
             except json.JSONDecodeError:
                 pass
@@ -123,12 +140,20 @@ def generate_email_with_ai(
         if subject_match:
             body = response_text[subject_match.end():].strip()
         
+        # Clean body - remove any placeholder names like [Name], [Recipient], etc.
+        body = re.sub(r'\[.*?\]', '', body)  # Remove [placeholder] patterns
+        body = re.sub(r'\{.*?\}', '', body)  # Remove {placeholder} patterns
+        body = re.sub(r'<.*?>', '', body)  # Remove <placeholder> patterns
+        body = body.strip()
+        
         return {
             "subject": subject,
             "body": body
         }
         
     except Exception as e:
-        logger.error(f"Error generating email: {e}")
-        raise ValueError(f"Failed to generate email: {str(e)}")
+        # Sanitize error message to prevent API key exposure
+        error_msg = sanitize_error_message(str(e))
+        logger.error(f"Error generating email: {error_msg}")
+        raise ValueError(f"Failed to generate email: {error_msg}")
 
