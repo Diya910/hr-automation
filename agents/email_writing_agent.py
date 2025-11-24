@@ -87,11 +87,6 @@ def generate_email_with_ai(
                 f"HR INSTRUCTIONS:\n{user_prompt}\n\n"
                 f"Generate a professional email. Provide ONLY a JSON response with this exact format:\n"
                 f'{{"subject": "Email Subject Here", "body": "Email body content here"}}\n\n'
-                f"IMPORTANT: Generate ONLY the email body content. Do NOT include:\n"
-                f"- Greetings like 'Dear [Name]' or 'Hi [Name]' (user will add recipient name)\n"
-                f"- Signatures like 'Best regards' or 'Sincerely' (user will add if needed)\n"
-                f"- Placeholder names like [Name], [Recipient], etc.\n"
-                f"Just provide the main email content that can be used directly."
             )
         else:
             # Generic email without candidate context
@@ -100,11 +95,6 @@ def generate_email_with_ai(
                 f"USER INSTRUCTIONS:\n{user_prompt}\n\n"
                 f"Generate a professional email. Provide ONLY a JSON response with this exact format:\n"
                 f'{{"subject": "Email Subject Here", "body": "Email body content here"}}\n\n'
-                f"IMPORTANT: Generate ONLY the email body content. Do NOT include:\n"
-                f"- Greetings like 'Dear [Name]' or 'Hi [Name]' (user will add recipient name)\n"
-                f"- Signatures like 'Best regards' or 'Sincerely' (user will add if needed)\n"
-                f"- Placeholder names like [Name], [Recipient], etc.\n"
-                f"Just provide the main email content that can be used directly."
             )
         
         response = model.invoke(prompt)
@@ -118,7 +108,6 @@ def generate_email_with_ai(
         if json_match:
             try:
                 result = json.loads(json_match.group(0))
-                # Clean body - remove any placeholder names
                 body = result.get("body", "")
                 body = re.sub(r'\[.*?\]', '', body)  # Remove [placeholder] patterns
                 body = re.sub(r'<.*?>', '', body)  # Remove <placeholder> patterns
@@ -130,20 +119,17 @@ def generate_email_with_ai(
                 }
             except json.JSONDecodeError:
                 pass
-        
-        # Fallback: try to extract subject and body manually
+
         subject_match = re.search(r'subject[:\s]+([^\n]+)', response_text, re.IGNORECASE)
         subject = subject_match.group(1).strip() if subject_match else "No Subject"
-        
-        # Extract body (everything after subject or the main content)
+
         body = response_text
         if subject_match:
             body = response_text[subject_match.end():].strip()
-        
-        # Clean body - remove any placeholder names like [Name], [Recipient], etc.
-        body = re.sub(r'\[.*?\]', '', body)  # Remove [placeholder] patterns
-        body = re.sub(r'\{.*?\}', '', body)  # Remove {placeholder} patterns
-        body = re.sub(r'<.*?>', '', body)  # Remove <placeholder> patterns
+
+        body = re.sub(r'\[.*?\]', '', body)
+        body = re.sub(r'\{.*?\}', '', body) 
+        body = re.sub(r'<.*?>', '', body)
         body = body.strip()
         
         return {
