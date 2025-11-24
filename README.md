@@ -2,6 +2,10 @@
 
 A comprehensive AI-powered HR automation system that streamlines resume analysis, candidate evaluation, email management, and communication. Built with Streamlit, LangChain, and advanced language models (Gemini/DeepSeek).
 
+## Demo Link
+
+[![Watch the video](https://img.youtube.com/vi/RzWW2353_QY/0.jpg)](https://youtu.be/RzWW2353_QY)
+
 ## 🚀 Features
 
 ### Core Capabilities
